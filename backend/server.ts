@@ -1,12 +1,32 @@
+//--------------Custom Error Classes--------------------
+class InputValidationError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "InputValidationError";
+    }
+}
+
+class TriangleValidationError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "TriangleValidationError";
+    }
+}
+//------------------------------------------------------
+
 // ตรวจสอบการรับข้อมูล
 const checkInvalidData = (value: number) => {
     const regex = /^\d+(\.\d{1,2})?$/; //กำหนดรูปแบบของของ Input ว่าเป็นจำนวนจริงบวกและ ทศนิยมไม่เกิน 2 ตำแหน่ง
-    return typeof value === "number" && value > 0 && regex.test(value.toString());
+    if (!(typeof value === "number" && value > 0 && regex.test(value.toString()))) {
+        throw new InputValidationError("ด้านทั้ง 3 ของสามเหลี่ยมต้องเป็นจำนวนจริงบวกและ ทศนิยมไม่เกิน 2 ตำแหน่งเท่านั้น");
+    }
 };
 
 // ตรวจสอบว่าเป็นสามเหลี่ยมหรือไม่
 const checkIsValidTriangle = (A: number, B: number, C: number) => {
-    return A + B > C && A + C > B && B + C > A;
+    if (!(A + B > C && A + C > B && B + C > A)) {
+        throw new TriangleValidationError("ด้านทั้ง 3 ของสามเหลี่ยมไม่สามารถนำมาประกอบเป็นสามเหลี่ยมได้");
+    }
 };
 
 // ตรวจสอบประเภทของสามเหลี่ยม
@@ -58,19 +78,11 @@ const server = Bun.serve({
             try {
                 const { A, B, C } = await req.json();
 
-                if (!checkInvalidData(A) || !checkInvalidData(B) || !checkInvalidData(C)) {
-                    return new Response(JSON.stringify({ error: "ด้านทั้ง 3 ของสามเหลี่ยมต้องเป็นจำนวนจริงบวกและ ทศนิยมไม่เกิน 2 ตำแหน่งเท่านั้น" }), { 
-                        status: 400, 
-                        headers: { "Content-Type": "application/json" } 
-                    });
-                }
-
-                if (!checkIsValidTriangle(A, B, C)) {
-                    return new Response(JSON.stringify({ error: "ด้านทั้ง 3 ของสามเหลี่ยมไม่สามารถนำมาประกอบเป็นสามเหลี่ยมได้" }), { 
-                        status: 400, 
-                        headers: { "Content-Type": "application/json" } 
-                    });
-                }
+                checkInvalidData(A);
+                checkInvalidData(B);
+                checkInvalidData(C);
+ 
+                checkIsValidTriangle(A, B, C);
 
                 const type = classification(A, B, C);
                 const { perimeter, area } = calculation(A, B, C);
@@ -82,8 +94,40 @@ const server = Bun.serve({
                 };
 
                 return new Response(JSON.stringify(response), { headers: { "Content-Type": "application/json" } });
-            } catch (error) {
-                return new Response(JSON.stringify({ error: "Invalid JSON body." }), { status: 400, headers: { "Content-Type": "application/json" } });
+            } catch (error) { 
+                if (error instanceof InputValidationError) {
+                    return new Response(JSON.stringify({ 
+                        errorType: "InputValidationError",
+                        error: error.message 
+                    }), {  
+                        status: 400,  
+                        headers: { "Content-Type": "application/json" }  
+                    });
+                } else if (error instanceof TriangleValidationError) {
+                    return new Response(JSON.stringify({ 
+                        errorType: "TriangleValidationError",
+                        error: error.message 
+                    }), {  
+                        status: 400,  
+                        headers: { "Content-Type": "application/json" }  
+                    });
+                } else if (error instanceof SyntaxError) {
+                    return new Response(JSON.stringify({ 
+                        errorType: "JSONParseError",
+                        error: "Invalid JSON body." 
+                    }), { 
+                        status: 400, 
+                        headers: { "Content-Type": "application/json" } 
+                    });
+                }
+                
+                return new Response(JSON.stringify({ 
+                    errorType: "UnexpectedError",
+                    error: "Unexpected error occurred" 
+                }), { 
+                    status: 500, 
+                    headers: { "Content-Type": "application/json" } 
+                });
             }
         }
 
